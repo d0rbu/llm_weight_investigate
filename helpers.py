@@ -21,3 +21,12 @@ def get_parameter_across_blocks(name: str, model: nn.Module) -> list[nn.Module]:
     blocks = get_blocks(model)
 
     return [getattr(block, name) for block in blocks]
+
+
+def get_parameter_deltas_across_blocks(name: str, model: nn.Module) -> list[nn.Module]:
+    parameters = get_parameter_across_blocks(name, model)
+
+    return [
+        [parameters[i] - parameters[j] for j in range(i)]
+        for i in range(1, len(parameters))
+    ]  # (num_blocks, num_blocks - 1, *)
