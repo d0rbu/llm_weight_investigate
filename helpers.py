@@ -17,10 +17,19 @@ def get_parameter_names(model: nn.Module) -> list[str]:
     return [name for name, param in blocks[0].named_parameters()]
 
 
+def get_nested_parameter(name: str, module: nn.Module) -> nn.Module:
+    name_hierarchy = name.split(".")
+
+    for name in name_hierarchy:
+        module = getattr(module, name)
+
+    return module
+
+
 def get_parameter_across_blocks(name: str, model: nn.Module) -> list[nn.Module]:
     blocks = get_blocks(model)
 
-    return [getattr(block, name) for block in blocks]
+    return [get_nested_parameter(name, block) for block in blocks]
 
 
 def get_parameter_deltas_across_blocks(name: str, model: nn.Module) -> list[nn.Module]:

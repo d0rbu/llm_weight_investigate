@@ -7,6 +7,8 @@ from helpers import get_parameter_across_blocks, get_parameter_names, get_parame
 
 
 def load_model(name: str) -> nn.Module:
+    print(f"Loading model {name}...")
+
     return AutoModel.from_pretrained(
         name, device_map="auto"
     )
@@ -55,7 +57,7 @@ EXPERIMENT_NAMES = {
 }
 
 
-def main(model_name: str = "NousResearch/Llama-2-70b-hf", experiment: list[str] | str | None = None, experiment_dir: os.PathLike | str = "outputs") -> None:
+def main(model_name: str = "NousResearch/Llama-2-7b-hf", experiment: list[str] | str | None = None, experiment_dir: os.PathLike | str = "outputs") -> None:
     model = load_model(model_name)
 
     if experiment is None:
@@ -79,4 +81,4 @@ def main(model_name: str = "NousResearch/Llama-2-70b-hf", experiment: list[str] 
 
 
 if __name__ == "__main__":
-    main()
+    main(experiment="weights_delta_svd")
