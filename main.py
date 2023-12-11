@@ -22,12 +22,12 @@ def weights_svdvals(model: nn.Module) -> dict[str, list[th.Tensor]]:
     for name in tqdm(parameter_names):
         parameters = get_parameter_across_blocks(name, model)
 
-        svdvals[name] = th.stack([th.linalg.svdvals(param) for param in parameters], dim=0)
+        svdvals[name] = th.stack([th.linalg.svdvals(param) for param in tqdm(parameters)], dim=0)
 
     return svdvals  # name: (num_blocks, num_singular_values)
 
 
-def weights_delta_svd(model: nn.Module) -> dict[str, list[list[th.Tensor]]]:
+def weights_delta_svdvals(model: nn.Module) -> dict[str, list[list[th.Tensor]]]:
     parameter_names = get_parameter_names(model)
 
     svdvals = {}
@@ -36,8 +36,8 @@ def weights_delta_svd(model: nn.Module) -> dict[str, list[list[th.Tensor]]]:
         all_parameter_deltas = get_parameter_deltas_across_blocks(name, model)
 
         ragged_svdval_array = [
-            [th.linalg.svdvals(parameter_delta) for parameter_delta in parameter_deltas]
-            for parameter_deltas in all_parameter_deltas
+            [th.linalg.svdvals(parameter_delta) for parameter_delta in tqdm(parameter_deltas)]
+            for parameter_deltas in twdm(all_parameter_deltas)
         ]  # (num_blocks - 1, num_blocks - 1, num_singular_values)
 
         svdvals_array = th.zeros((len(all_parameter_deltas), len(all_parameter_deltas), ragged_svdval_array[0][0].shape[0]))
@@ -53,7 +53,7 @@ def weights_delta_svd(model: nn.Module) -> dict[str, list[list[th.Tensor]]]:
 
 EXPERIMENT_NAMES = {
     "weights_svdvals": weights_svdvals,
-    "weights_delta_svd": weights_delta_svd
+    "weights_delta_svdvals": weights_delta_svdvals
 }
 
 
@@ -81,4 +81,4 @@ def main(model_name: str = "NousResearch/Llama-2-7b-hf", experiment: list[str] |
 
 
 if __name__ == "__main__":
-    main(experiment="weights_delta_svd")
+    main(experiment="weights_svdvals")
