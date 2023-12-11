@@ -10,7 +10,7 @@ def load_model(name: str) -> nn.Module:
     print(f"Loading model {name}...")
 
     return AutoModel.from_pretrained(
-        name, device_map="auto"
+        name, device_map="cpu"
     )
 
 
@@ -22,7 +22,7 @@ def weights_svdvals(model: nn.Module) -> dict[str, list[th.Tensor]]:
     for name in tqdm(parameter_names):
         parameters = get_parameter_across_blocks(name, model)
 
-        svdvals[name] = th.stack([th.svdvals(param) for param in parameters], dim=0)
+        svdvals[name] = th.stack([th.linalg.svdvals(param) for param in parameters], dim=0)
 
     return svdvals  # name: (num_blocks, num_singular_values)
 
@@ -36,7 +36,7 @@ def weights_delta_svd(model: nn.Module) -> dict[str, list[list[th.Tensor]]]:
         all_parameter_deltas = get_parameter_deltas_across_blocks(name, model)
 
         ragged_svdval_array = [
-            [th.svdvals(parameter_delta) for parameter_delta in parameter_deltas]
+            [th.linalg.svdvals(parameter_delta) for parameter_delta in parameter_deltas]
             for parameter_deltas in all_parameter_deltas
         ]  # (num_blocks - 1, num_blocks - 1, num_singular_values)
 
