@@ -1,7 +1,7 @@
 import numpy as np
 import torch as th
 import torch.nn as nn
-from transformers import PreTrainedModel, PretrainedConfig
+from transformers import PreTrainedModel, PretrainedConfig, AutoConfig, AutoModel
 from typing import Iterable, Any, Hashable, TypeVar, TypedDict
 
 H = TypeVar("H", bound=Hashable)
@@ -29,11 +29,19 @@ def get_duplicate_elements(iter: Iterable[H]) -> set[H]:
 class LoRAfyConfig(PretrainedConfig):
     def __init__(
         self,
+        model: PreTrainedModel | None = None,
         *LoRAfy_parameter_configs: Iterable[LoRAfyParameterConfig],
         default_rank: int | float | None = None,
-        model: PreTrainedModel | None = None,  # Just extra safety to validate parameter configs
         **kwargs: dict[str, Any],
     ) -> None:
+        for parameter_config in LoRAfy_parameter_configs:  # Remove trailing .weight from parameter names
+            for param_type in ("to_param", "from_param"):
+                param_hierarchy = parameter_config[param_type].split(".")
+                if param_hierarchy[-1] == "weight":
+                    param_hierarchy = param_hierarchy[:-1]
+                
+                parameter_config[param_type] = ".".join(param_hierarchy)
+
         to_params = [param_config["to_param"] for param_config in LoRAfy_parameter_configs]
         from_params = [param_config["from_param"] for param_config in LoRAfy_parameter_configs]
         all_params = set(to_params).union(set(from_params))
@@ -62,7 +70,7 @@ class LoRAfyConfig(PretrainedConfig):
             if negative_rank_configs_mask.any():
                 raise error
 
-        if model is not None:  # If they want to check that the parameter configs make sense
+        if model is not None:  # Check that the parameter configs make sense
             model_state_dict_keys = model.state_dict().keys()
             for param in all_params:
                 if f"{param}.weight" not in model_state_dict_keys:
@@ -70,6 +78,17 @@ class LoRAfyConfig(PretrainedConfig):
                                     f"configs but {param}.weight was not found in the model " \
                                     f"state_dict. Are you sure you have the right model loaded?")
 
+        if model is not None:
+            # param_configs_repr = "_".join(
+            #     f"{param_config['from_param']}-{param_config['to_param']}-rank{param_config['rank']}"
+            #     for param_config in LoRAfy_parameter_configs
+            # )
+            # model_type = f"{model.config.model_type}_lorafied_{param_configs_repr}"
+            model_type = "lorafied"
+            self.model_type = model_type
+
+            AutoConfig.register(model_type, LoRAfyParameterConfig)
+            AutoModel.register(LoRAfyParameterConfig, LoRAfiedModel)
         self.param_configs: list[LoRAfyParameterConfig] = list(LoRAfy_parameter_configs)
         self.default_rank: int | float = -1 if default_rank is None else default_rank
 
