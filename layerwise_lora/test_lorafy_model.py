@@ -22,15 +22,11 @@ def test_lorafy_llama_2_7b():
         LoRAfyParameterConfig(
             to_param=f"model.layers.{i}.self_attn.q_proj",
             from_param="model.layers.0.self_attn.q_proj",
-            rank=1000,
+            rank=1024,
         ) for i in range(1, 32)
     ]
     config = LoRAfyConfig(*parameter_configs, model=model, do_sample=True)
 
     lorafied_model = LoRAfiedModel(config, model)
-    
-    import pdb; pdb.set_trace()
+
     lorafied_model.save_pretrained(os.path.join(LORAFIED_MODEL_DIR, MODEL_NAME))
-
-
-test_lorafy_config()
