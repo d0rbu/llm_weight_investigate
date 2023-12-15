@@ -53,7 +53,7 @@ class LoRAfyConfig(PretrainedConfig):
         if default_rank is None or default_rank < 0:
             error = ValueError(f"A rank must be specified for each LoRAfied parameter, but no " \
                                  f"default rank was specified and at least one parameter config " \
-                                 f"did not specify a rank: {ranks[undefined_rank_configs_mask]}")
+                                 f"did not specify a rank.")
 
             if None in ranks:
                 raise error
