@@ -2,6 +2,7 @@ import os
 import itertools
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from lorafy_model import LoRAfyParameterConfig, LoRAfyConfig, LoRAfiedModel
+from lm_eval import evaluator
 
 LORAFIED_MODEL_DIR = "lorafied_models"
 
@@ -18,6 +19,7 @@ def lorafied_llama_2_7b():
             to_param=f"model.layers.{i}.{weight_type}",
             from_param=f"model.layers.0.{weight_type}",
             rank=1024,
+            initialize=True,
         ) for i, weight_type in itertools.product(range(1, 32), WEIGHT_TYPES))
     ]
     config = LoRAfyConfig(model, *parameter_configs, do_sample=True)

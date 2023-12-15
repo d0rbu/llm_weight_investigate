@@ -11,6 +11,7 @@ class LoRAfyParameterConfig(TypedDict):
     to_param: str
     from_param: str
     rank: int | float | None
+    initialize: bool | None
 
 
 def get_duplicate_elements(iter: Iterable[H]) -> set[H]:
@@ -27,6 +28,8 @@ def get_duplicate_elements(iter: Iterable[H]) -> set[H]:
 
 
 class LoRAfyConfig(PretrainedConfig):
+    model_type = "lorafied"
+
     def __init__(
         self,
         model: PreTrainedModel | None = None,
@@ -34,7 +37,7 @@ class LoRAfyConfig(PretrainedConfig):
         default_rank: int | float | None = None,
         **kwargs: dict[str, Any],
     ) -> None:
-        for parameter_config in LoRAfy_parameter_configs:  # Remove trailing .weight from parameter names
+        for parameter_config in LoRAfy_parameter_configs:  # Remove trailing .weight
             for param_type in ("to_param", "from_param"):
                 param_hierarchy = parameter_config[param_type].split(".")
                 if param_hierarchy[-1] == "weight":
@@ -78,19 +81,12 @@ class LoRAfyConfig(PretrainedConfig):
                                     f"configs but {param}.weight was not found in the model " \
                                     f"state_dict. Are you sure you have the right model loaded?")
 
-        if model is not None:
-            # param_configs_repr = "_".join(
-            #     f"{param_config['from_param']}-{param_config['to_param']}-rank{param_config['rank']}"
-            #     for param_config in LoRAfy_parameter_configs
-            # )
-            # model_type = f"{model.config.model_type}_lorafied_{param_configs_repr}"
-            model_type = "lorafied"
-            self.model_type = model_type
-
-            AutoConfig.register(model_type, LoRAfyParameterConfig)
-            AutoModel.register(LoRAfyParameterConfig, LoRAfiedModel)
         self.param_configs: list[LoRAfyParameterConfig] = list(LoRAfy_parameter_configs)
         self.default_rank: int | float = -1 if default_rank is None else default_rank
+
+        if model is not None:
+            AutoConfig.register(self.model_type, LoRAfyConfig)
+            AutoModel.register(LoRAfyConfig, LoRAfiedModel)
 
         super().__init__(**kwargs)
 
@@ -119,7 +115,14 @@ class LoRAfiedModel(PreTrainedModel):
         for param_config in config.param_configs:
             rank = param_config["rank"] if param_config["rank"] and param_config["rank"] >= 0 \
                 else config.default_rank
-            self.LoRAfy_parameter(param_config["from_param"], param_config["to_param"], rank)
+            calculate_pq: bool = bool(param_config["initialize"])
+            param_config["initialize"] = False  # If we already initialized, don't do it again
+            self.LoRAfy_parameter(
+                param_config["from_param"],
+                param_config["to_param"],
+                rank,
+                calculate_pq,
+            )
 
     def get_nested_parameter(self, name: str) -> nn.Module:
         if name == "":
@@ -133,7 +136,13 @@ class LoRAfiedModel(PreTrainedModel):
 
         return module
 
-    def LoRAfy_parameter(self, from_param: str, to_param: str, rank: int | float) -> None:
+    def LoRAfy_parameter(
+            self,
+            from_param: str,
+            to_param: str,
+            rank: int | float,
+            initialize: bool = True
+        ) -> None:
         print(f"LoRAfying {to_param} from {from_param}")
         to_param_hierarchy = to_param.split(".")
         to_param_name = to_param_hierarchy.pop()
@@ -142,30 +151,42 @@ class LoRAfiedModel(PreTrainedModel):
         from_layer = self.get_nested_parameter(from_param)
         to_layer = self.get_nested_parameter(to_param)
 
-        weight_delta = to_layer.weight - from_layer.weight
-        U, S, Vh = th.linalg.svd(weight_delta, full_matrices=False)
-        V = th.conj(Vh).transpose(0, 1)
+        if to_layer.weight.shape != from_layer.weight.shape:
+            raise ValueError(f"{to_param} is being LoRAfied from base parameter {from_layer}" \
+                             f", but they have different shapes! Base has shape " \
+                             f"{from_layer.weight.shape} and LoRAfied weight has shape " \
+                             f"{to_layer.weight.shape}")
 
-        if isinstance(rank, float):
-            rank: int = int(rank * S.shape[0])
+        if initialize:
+            print(f"Approximating {to_param} from {from_param}...")
 
-        U_truncated = U[:, :rank]
-        S_truncated = S[:rank]
-        S_truncated.sqrt_()
-        S_truncated = th.diag_embed(S_truncated)
-        V_truncated = V[:, :rank]
+            weight_delta = to_layer.weight - from_layer.weight
+            U, S, Vh = th.linalg.svd(weight_delta, full_matrices=False)
+            V = th.conj(Vh).transpose(0, 1)
 
-        # P = US^{1/2}, Q = VS^{1/2}
-        P = U_truncated @ S_truncated
-        Q = V_truncated @ S_truncated
-        Qh = th.conj(Q).transpose(0, 1)
+            if isinstance(rank, float):
+                rank: int = int(rank * S.shape[0])
 
-        up_proj_layer = nn.Linear(P.shape[1], P.shape[0])
-        down_proj_layer = nn.Linear(*Q.shape)
+            U_truncated = U[:, :rank]
+            S_truncated = S[:rank]
+            S_truncated.sqrt_()
+            S_truncated = th.diag_embed(S_truncated)
+            V_truncated = V[:, :rank]
 
-        with th.no_grad():
-            up_proj_layer.weight.copy_(P)
-            down_proj_layer.weight.copy_(Qh)
+            # P = US^{1/2}, Q = VS^{1/2}
+            P = U_truncated @ S_truncated
+            Q = V_truncated @ S_truncated
+            Qh = th.conj(Q).transpose(0, 1)
+
+            up_proj_layer = nn.Linear(P.shape[1], P.shape[0])
+            down_proj_layer = nn.Linear(*Q.shape)
+
+            with th.no_grad():
+                up_proj_layer.weight.copy_(P)
+                down_proj_layer.weight.copy_(Qh)
+        else:
+            up_proj_layer = nn.Linear(rank, to_layer.weight.shape[0])
+            down_proj_layer = nn.Linear(to_layer.weight.shape[1], rank)
 
         new_layer = LoRA(from_layer, up_proj_layer, down_proj_layer)
 
