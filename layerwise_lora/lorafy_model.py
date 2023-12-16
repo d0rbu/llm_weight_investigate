@@ -1,7 +1,7 @@
 import numpy as np
 import torch as th
 import torch.nn as nn
-from transformers import PreTrainedModel, PretrainedConfig, AutoConfig, AutoModel
+from transformers import PreTrainedModel, PretrainedConfig, AutoConfig, AutoModel, GenerationMixin
 from typing import Iterable, Any, Hashable, TypeVar, TypedDict
 
 H = TypeVar("H", bound=Hashable)
@@ -103,8 +103,9 @@ class LoRA(nn.Module):
         return self.A(x) + self.P(self.Qh(x))
 
 
-class LoRAfiedModel(PreTrainedModel):
+class LoRAfiedModel(PreTrainedModel, GenerationMixin):
     config_class = LoRAfyConfig
+    _no_split_modules = tuple()
 
     def __init__(self, config: LoRAfyConfig, model: PreTrainedModel) -> None:
         super().__init__(config)
@@ -123,6 +124,20 @@ class LoRAfiedModel(PreTrainedModel):
                 rank,
                 calculate_pq,
             )
+    
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: th.Tensor,
+        attention_mask: th.Tensor,
+        *args: list[Any],
+        **kwargs: dict[str, Any]
+    ) -> Any:
+        return self.model.prepare_inputs_for_generation(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            *args, 
+            **kwargs
+        )
 
     def get_nested_parameter(self, name: str) -> nn.Module:
         if name == "":
@@ -193,5 +208,5 @@ class LoRAfiedModel(PreTrainedModel):
         setattr(to_layer_parent, to_param_name, new_layer)
         del to_layer
 
-    def forward(self, x: Any):
-        return self.model.forward(x)
+    def forward(self, *args: list[Any], **kwargs: dict[str, Any]) -> Any:
+        return self.model.forward(*args, **kwargs)
