@@ -22,9 +22,17 @@ if __name__ == "__main__":
     verbosity = "INFO"
     initialize_tasks(verbosity)
 
-    name = "NousResearch/Llama-2-7b-hf"
+    name = "meta-llama/Llama-2-7b-hf"
     # tasks = ["winogrande", "lambada", "piqa", "coqa", "hellaswag", "mmlu"]
-    tasks = ["lambada", "piqa", "coqa"]
+    # tasks = ["winogrande"]
+    # tasks = ["lambada", "piqa", "coqa"]
+    # tasks = ["mmlu"]
+    # tasks = ["boolq"]
+    # tasks = ["hellaswag"]
+    # tasks = ["arc_easy", "arc_challenge"]
+    # tasks = ["openbookqa"]
+    # tasks = ["commonsenseqa"]
+    tasks = ["gsm8k"]
     path = os.path.join(LORAFIED_MODEL_DIR, name)
 
     base_model = AutoModelForCausalLM.from_pretrained(name)
@@ -39,5 +47,5 @@ if __name__ == "__main__":
         batch_size="auto",
     )
 
-    with open("results.json", "w") as f:
+    with open("gsm8k_results.json", "w") as f:
         json.dump(results, f, indent=2, default=_handle_non_serializable)

@@ -8,7 +8,7 @@ LORAFIED_MODEL_DIR = "lorafied_models"
 
 
 def lorafied_llama_2_7b():
-    MODEL_NAME = "NousResearch/Llama-2-7b-hf"
+    MODEL_NAME = "meta-llama/Llama-2-7b-hf"
     WEIGHT_TYPES = ("self_attn.q_proj", "self_attn.k_proj")
 
     model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
